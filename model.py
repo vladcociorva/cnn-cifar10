@@ -38,6 +38,7 @@ class CNN(nn.Module):
     def forward(
         self, x: torch.tensor, targets: Optional[torch.tensor] = None
     ) -> torch.tensor:
+        # x: (B, 3, 32, 32)
         x = F.gelu(self.bn1(self.conv1(x)))  # (B, 96, 32, 32)
         x = F.gelu(self.bn2(self.conv2(x)))  # (B, 256, 32, 32)
         x = self.pool1(x)  # (B, 256, 16, 16)
