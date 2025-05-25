@@ -5,6 +5,7 @@ import torch
 import torchvision
 from torchvision import transforms
 from torch.utils.data import DataLoader, random_split
+from async_logger import AsyncLogger
 from model import CNN
 
 device = torch.device("cuda:0")
@@ -43,6 +44,7 @@ val_loader = DataLoader(val_dataset, batch_size=B, shuffle=False)
 model = CNN()
 print(f"params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
 model.to(device)
+model.compile()
 
 optim = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-4)
 val_cadence = 100
@@ -57,6 +59,8 @@ def get_grad_norm(model):
     total_norm = total_norm**0.5
     return total_norm
 
+
+logger = AsyncLogger(path=f"metrics-{time.strftime('%Y-%m-%d-%H-%M-%S')}.jsonl")
 
 for step in range(1000):
     if step % val_cadence == 0:
@@ -76,7 +80,12 @@ for step in range(1000):
                 total_samples += batch_size
             val_loss /= total_samples
             val_acc = val_correct / total_samples
-            print(f"val loss {val_loss:.6f} | val acc {val_acc:.4f}")
+            logger(
+                step=step,
+                val_loss=val_loss,
+                val_acc=val_acc,
+            )
+            print(f"step {step:>5} | val_loss {val_loss:.6f} | val_acc {val_acc:.4f}")
         model.train()
 
     optim.zero_grad()
@@ -90,9 +99,20 @@ for step in range(1000):
     optim.step()
     torch.cuda.synchronize()
     end = time.perf_counter()
+    
+    grad_norm = get_grad_norm(model)
+    elapsed = (end - start) * 1e3
+    acc = (torch.argmax(logits, dim=1) == y).float().mean()
 
-    pred = torch.argmax(logits, dim=1)
-    acc = (pred == y).float().mean()
-    print(
-        f"step {step:>5} | loss {loss.item():.6f} | acc {acc.item():.4f} | grad norm {get_grad_norm(model):.4f} | time {(end - start) * 1e3:.2f}ms"
+    logger(
+        step=step,
+        train_loss=loss.item(),
+        train_acc=acc.item(),
+        grad_norm=grad_norm,
+        step_time=elapsed,
     )
+    print(
+        f"step {step:>5} | train_loss {loss.item():.6f} | train_acc {acc.item():.4f} | grad norm {grad_norm:.4f} | step time {elapsed:.2f}ms"
+    )
+
+logger.close()
