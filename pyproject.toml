@@ -8,5 +8,6 @@ dependencies = [
     "torch",
     "torchvision",
     "ipykernel",
-    "matplotlib"
+    "matplotlib",
+    "pandas"
 ]
